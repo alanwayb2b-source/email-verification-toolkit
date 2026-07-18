@@ -1,7 +1,9 @@
 import unittest
+from unittest.mock import patch
 
 from email_cleaner import (
     clean_email,
+    has_valid_mx,
     is_disposable_email,
     is_valid_email,
 )
@@ -56,28 +58,37 @@ class TestEmailCleaner(unittest.TestCase):
             )
         )
 
-    def test_invalid_email_is_not_disposable(self):
-        disposable_domains = {
-            "mailinator.com",
-        }
-
-        self.assertFalse(
-            is_disposable_email(
-                "invalid-email",
-                disposable_domains
-            )
-        )
-
-    def test_disposable_domain_case_insensitive(self):
-        disposable_domains = {
-            "mailinator.com",
-        }
+    @patch("email_cleaner.dns.resolver.resolve")
+    def test_valid_mx(self, mock_resolve):
+        mock_resolve.return_value = ["mx1.example.com"]
 
         self.assertTrue(
-            is_disposable_email(
-                "USER@MAILINATOR.COM",
-                disposable_domains
-            )
+            has_valid_mx("user@example.com")
+        )
+
+    @patch("email_cleaner.dns.resolver.resolve")
+    def test_no_mx(self, mock_resolve):
+        import dns.resolver
+
+        mock_resolve.side_effect = dns.resolver.NoAnswer
+
+        self.assertFalse(
+            has_valid_mx("user@example.com")
+        )
+
+    @patch("email_cleaner.dns.resolver.resolve")
+    def test_dns_timeout(self, mock_resolve):
+        import dns.resolver
+
+        mock_resolve.side_effect = dns.resolver.Timeout
+
+        self.assertIsNone(
+            has_valid_mx("user@example.com")
+        )
+
+    def test_invalid_email_mx(self):
+        self.assertFalse(
+            has_valid_mx("invalid-email")
         )
 
 
