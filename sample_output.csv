@@ -1,0 +1,5 @@
+name,company,email,email_status
+John Doe,Example Inc,john@example.com,valid_format
+Jane Smith,Demo Corp,jane@example.com,valid_format
+Michael Brown,Test Company,michael@testcompany.com,valid_format
+Invalid User,Sample Company,invalid-email,invalid_format
