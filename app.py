@@ -9,15 +9,13 @@ from excel_cleaner import process_excel
 
 
 st.set_page_config(
-    page_title="Email Verification Toolkit",
+    page_title="ZenBright Email Verification",
     page_icon="📧",
     layout="wide",
 )
 
 
 def add_final_status(df):
-    """Create a simple final verification status."""
-
     def classify(row):
         email_status = str(row.get("email_status", ""))
         disposable = str(row.get("disposable_email", ""))
@@ -44,12 +42,82 @@ def add_final_status(df):
     return df
 
 
-st.title("📧 Email Verification Toolkit")
+st.markdown(
+    """
+    <style>
+    .main-title {
+        font-size: 42px;
+        font-weight: 700;
+        margin-bottom: 0px;
+    }
 
-st.write(
-    "Upload a CSV or Excel file to clean, validate, "
-    "deduplicate, and analyze email addresses."
+    .brand-name {
+        font-size: 18px;
+        font-weight: 600;
+        margin-top: 0px;
+        opacity: 0.8;
+    }
+
+    .subtitle {
+        font-size: 18px;
+        margin-bottom: 25px;
+    }
+
+    .footer {
+        text-align: center;
+        margin-top: 50px;
+        padding-top: 20px;
+        border-top: 1px solid #ddd;
+        font-size: 14px;
+        opacity: 0.7;
+    }
+
+    .notice {
+        padding: 15px;
+        border-radius: 8px;
+        background-color: rgba(128,128,128,0.08);
+        margin-top: 20px;
+        margin-bottom: 20px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
+
+
+st.markdown(
+    '<div class="main-title">📧 ZenBright Email Verification</div>',
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    '<div class="brand-name">Powered by ZenBright Data</div>',
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    """
+    <div class="subtitle">
+    Clean, validate, deduplicate, and analyze email addresses
+    from CSV and Excel files.
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+st.markdown(
+    """
+    <div class="notice">
+    <strong>Verification Note:</strong>
+    This tool checks email syntax, disposable domains, and MX/domain
+    configuration. MX validation does not guarantee that an individual
+    mailbox exists or can receive email.
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 uploaded_file = st.file_uploader(
     "Upload CSV or Excel file",
@@ -129,7 +197,7 @@ if uploaded_file is not None:
                         )
 
                         download_name = (
-                            "verified_emails.csv"
+                            "zenbright_verified_emails.csv"
                         )
 
                         mime_type = "text/csv"
@@ -150,7 +218,7 @@ if uploaded_file is not None:
                         )
 
                         download_name = (
-                            "verified_emails.xlsx"
+                            "zenbright_verified_emails.xlsx"
                         )
 
                         mime_type = (
@@ -283,7 +351,7 @@ if uploaded_file is not None:
 
                         excel_output = (
                             temp_dir /
-                            "verified_final.xlsx"
+                            "zenbright_verified_final.xlsx"
                         )
 
                         result_df.to_excel(
@@ -296,17 +364,26 @@ if uploaded_file is not None:
                         )
 
                     st.download_button(
-                        label=(
-                            "Download Verified File"
-                        ),
+                        label="Download Verified File",
                         data=download_data,
                         file_name=download_name,
                         mime=mime_type,
                         use_container_width=True,
                     )
 
+
     except Exception as exc:
 
         st.error(
             f"An error occurred: {exc}"
         )
+
+
+st.markdown(
+    """
+    <div class="footer">
+    © 2026 ZenBright Data · Email Verification Toolkit
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
