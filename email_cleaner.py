@@ -3,6 +3,8 @@ import re
 import sys
 from pathlib import Path
 
+import dns.resolver
+
 
 EMAIL_PATTERN = re.compile(
     r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@"
@@ -39,28 +41,71 @@ def load_disposable_domains(filename="disposable_domains.txt"):
         }
 
 
-def is_disposable_email(email, disposable_domains=None):
-    """Check whether an email uses a known disposable email domain."""
+def is_disposable_email(email, disposable_domains):
+    """Check whether an email uses a disposable email domain."""
     email = clean_email(email)
 
-    if "@" not in email:
+    if not is_valid_email(email):
         return False
 
-    if disposable_domains is None:
-        disposable_domains = load_disposable_domains()
-
-    domain = email.rsplit("@", 1)[1]
-
+    domain = email.rsplit("@", 1)[1].lower()
     return domain in disposable_domains
 
 
-def process_csv(input_file, output_file, check_disposable=True):
+def has_valid_mx(email):
+    """
+    Check whether the email domain has an MX record.
+
+    Returns:
+        True  - MX record exists
+        False - domain has no usable MX record
+        None  - DNS lookup failed temporarily or unexpectedly
+    """
+    email = clean_email(email)
+
+    if not is_valid_email(email):
+        return False
+
+    domain = email.rsplit("@", 1)[1]
+
+    try:
+        answers = dns.resolver.resolve(
+            domain,
+            "MX",
+            lifetime=5
+        )
+
+        return len(answers) > 0
+
+    except (
+        dns.resolver.NXDOMAIN,
+        dns.resolver.NoAnswer,
+    ):
+        return False
+
+    except (
+        dns.resolver.Timeout,
+        dns.resolver.NoNameservers,
+    ):
+        return None
+
+    except Exception:
+        return None
+
+
+def process_csv(
+    input_file,
+    output_file,
+    check_disposable=True,
+    check_mx=True
+):
     """
     Clean emails, remove duplicates, validate format,
-    and optionally detect disposable email addresses.
+    detect disposable emails, and check MX records.
 
     The input CSV must contain a column named 'email'.
     """
+
     seen_emails = set()
 
     disposable_domains = (
@@ -69,18 +114,29 @@ def process_csv(input_file, output_file, check_disposable=True):
         else set()
     )
 
-    with open(input_file, "r", encoding="utf-8-sig", newline="") as infile:
+    with open(
+        input_file,
+        "r",
+        encoding="utf-8-sig",
+        newline=""
+    ) as infile:
+
         reader = csv.DictReader(infile)
 
-        if not reader.fieldnames or "email" not in [
-            name.lower() for name in reader.fieldnames
-        ]:
-            raise ValueError("Input CSV must contain an 'email' column.")
+        if not reader.fieldnames:
+            raise ValueError("Input CSV has no header row.")
 
-        email_column = next(
-            name for name in reader.fieldnames
-            if name.lower() == "email"
-        )
+        email_column = None
+
+        for column in reader.fieldnames:
+            if column.strip().lower() == "email":
+                email_column = column
+                break
+
+        if email_column is None:
+            raise ValueError(
+                "Input CSV must contain a column named 'email'."
+            )
 
         fieldnames = list(reader.fieldnames)
 
@@ -89,6 +145,9 @@ def process_csv(input_file, output_file, check_disposable=True):
 
         if "disposable_email" not in fieldnames:
             fieldnames.append("disposable_email")
+
+        if "mx_status" not in fieldnames:
+            fieldnames.append("mx_status")
 
         with open(
             output_file,
@@ -105,24 +164,36 @@ def process_csv(input_file, output_file, check_disposable=True):
             writer.writeheader()
 
             for row in reader:
+
                 email = clean_email(
                     row.get(email_column, "")
                 )
 
-                if not email or email in seen_emails:
+                # Skip blank emails
+                if not email:
+                    continue
+
+                # Remove duplicates
+                if email in seen_emails:
                     continue
 
                 seen_emails.add(email)
 
+                # Save cleaned email
                 row[email_column] = email
+
+                # Basic format validation
+                valid_format = is_valid_email(email)
 
                 row["email_status"] = (
                     "valid_format"
-                    if is_valid_email(email)
+                    if valid_format
                     else "invalid_format"
                 )
 
-                if check_disposable:
+                # Disposable email detection
+                if check_disposable and valid_format:
+
                     row["disposable_email"] = (
                         "yes"
                         if is_disposable_email(
@@ -131,14 +202,40 @@ def process_csv(input_file, output_file, check_disposable=True):
                         )
                         else "no"
                     )
+
+                elif check_disposable:
+                    row["disposable_email"] = "unknown"
+
                 else:
                     row["disposable_email"] = "not_checked"
+
+                # MX / domain validation
+                if check_mx and valid_format:
+
+                    mx_result = has_valid_mx(email)
+
+                    if mx_result is True:
+                        row["mx_status"] = "valid_mx"
+
+                    elif mx_result is False:
+                        row["mx_status"] = "no_mx"
+
+                    else:
+                        row["mx_status"] = "dns_error"
+
+                elif check_mx:
+                    row["mx_status"] = "invalid_format"
+
+                else:
+                    row["mx_status"] = "not_checked"
 
                 writer.writerow(row)
 
     print(
-        f"Done! Cleaned file saved to: {output_file}"
+        f"Done! Cleaned file saved to: "
+        f"{output_file}"
     )
+
     print(
         f"Unique email records processed: "
         f"{len(seen_emails)}"
@@ -146,11 +243,14 @@ def process_csv(input_file, output_file, check_disposable=True):
 
 
 if __name__ == "__main__":
+
     if len(sys.argv) != 3:
+
         print(
             "Usage: python email_cleaner.py "
             "input.csv output.csv"
         )
+
         sys.exit(1)
 
     process_csv(
